@@ -1,27 +1,60 @@
-const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', '..', 'data', 'campaigns.db');
+// ─── Vercel Detection ────────────────────────────────────────
+// On Vercel serverless, filesystem is read-only except /tmp.
+// The VERCEL env var is always set by Vercel to '1'.
+const isVercel = !!process.env.VERCEL;
 
-// Ensure data directory exists
-const dataDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+// ─── Database Path ───────────────────────────────────────────
+const defaultDbPath = isVercel
+  ? '/tmp/data/campaigns.db'
+  : path.join(__dirname, '..', '..', 'data', 'campaigns.db');
+
+const DB_PATH = process.env.DB_PATH || defaultDbPath;
+
+// ─── Ensure data directory exists ────────────────────────────
+let db;
+try {
+  const dataDir = path.dirname(DB_PATH);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  const Database = require('better-sqlite3');
+  db = new Database(DB_PATH);
+
+  // Enable WAL mode for better performance
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+
+  console.log(`✅ SQLite database opened at ${DB_PATH}`);
+} catch (err) {
+  console.error('❌ Failed to open SQLite database:', err.message);
+  // Provide a fallback in-memory database so the process doesn't crash
+  try {
+    const Database = require('better-sqlite3');
+    db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    console.log('⚠️  Falling back to in-memory SQLite database');
+  } catch (memErr) {
+    console.error('❌ better-sqlite3 is not available:', memErr.message);
+    // Last resort: provide a stub so the module can still load
+    db = null;
+  }
 }
-
-const db = new Database(DB_PATH);
-
-// Enable WAL mode for better performance
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
 
 /**
  * Initialize tables and seed data
  */
 function initializeDatabase() {
+  if (!db) {
+    console.error('❌ No database connection available — skipping initialization');
+    return;
+  }
+
   // ── Users table ──
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -104,6 +137,10 @@ function initializeDatabase() {
  * Handles SELECT, INSERT/UPDATE/DELETE with RETURNING * support
  */
 function query(sql, params = []) {
+  if (!db) {
+    throw new Error('Database is not available');
+  }
+
   const trimmed = sql.trim();
   const upper = trimmed.toUpperCase();
 
