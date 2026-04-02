@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notification Center — Campaign Alerts</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary: #0f0f14;
+      --bg-secondary: #1a1a24;
+      --bg-card: #22222e;
+      --bg-hover: #2a2a3a;
+      --text-primary: #e8e8f0;
+      --text-secondary: #9898b0;
+      --text-muted: #6868808;
+      --accent: #6c63ff;
+      --accent-glow: rgba(108, 99, 255, 0.3);
+      --critical: #ff4d6a;
+      --critical-bg: rgba(255, 77, 106, 0.12);
+      --warning: #ffb84d;
+      --warning-bg: rgba(255, 184, 77, 0.12);
+      --info: #4dabff;
+      --info-bg: rgba(77, 171, 255, 0.12);
+      --success: #4dff91;
+      --border: rgba(255, 255, 255, 0.06);
+      --radius: 12px;
+      --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* ─── Header ────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 32px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header .subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    /* ─── Bell Icon ─────────────────────────────── */
+    .bell-container {
+      position: relative;
+      cursor: pointer;
+    }
+
+    .bell-icon {
+      width: 28px;
+      height: 28px;
+      fill: var(--text-secondary);
+      transition: fill 0.2s, transform 0.2s;
+    }
+
+    .bell-container:hover .bell-icon {
+      fill: var(--accent);
+      transform: scale(1.1);
+    }
+
+    .bell-container.has-unread .bell-icon {
+      animation: ring 0.6s ease-in-out;
+    }
+
+    @keyframes ring {
+      0%, 100% { transform: rotate(0deg); }
+      15% { transform: rotate(12deg); }
+      30% { transform: rotate(-10deg); }
+      45% { transform: rotate(8deg); }
+      60% { transform: rotate(-6deg); }
+      75% { transform: rotate(3deg); }
+    }
+
+    .badge {
+      position: absolute;
+      top: -6px;
+      right: -8px;
+      background: var(--critical);
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      min-width: 20px;
+      height: 20px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 5px;
+      box-shadow: 0 2px 8px rgba(255, 77, 106, 0.5);
+      transform: scale(0);
+      transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+    }
+
+    .badge.visible { transform: scale(1); }
+
+    /* ─── Status Bar ────────────────────────────── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 32px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px rgba(77, 255, 145, 0.5);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .status-dot.disconnected {
+      background: var(--critical);
+      box-shadow: 0 0 8px rgba(255, 77, 106, 0.5);
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border-color: var(--accent);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
+    .btn-primary:hover {
+      background: #5a52e0;
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+
+    /* ─── Tabs ──────────────────────────────────── */
+    .tabs {
+      display: flex;
+      gap: 0;
+      padding: 0 32px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab {
+      padding: 14px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border: none;
+      background: none;
+      cursor: pointer;
+      position: relative;
+      font-family: inherit;
+      transition: color 0.2s;
+    }
+
+    .tab:hover { color: var(--text-primary); }
+
+    .tab.active {
+      color: var(--accent);
+    }
+
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+      border-radius: 1px 1px 0 0;
+    }
+
+    /* ─── Content ───────────────────────────────── */
+    .content { padding: 24px 32px; }
+
+    /* ─── Notification List ─────────────────────── */
+    .notification-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .notification-item {
+      display: flex;
+      gap: 14px;
+      padding: 16px 18px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .notification-item::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      border-radius: 3px 0 0 3px;
+    }
+
+    .notification-item.severity-critical::before { background: var(--critical); }
+    .notification-item.severity-warning::before { background: var(--warning); }
+    .notification-item.severity-info::before { background: var(--info); }
+
+    .notification-item.unread {
+      background: var(--bg-hover);
+      border-color: rgba(108, 99, 255, 0.2);
+    }
+
+    .notification-item:hover {
+      background: var(--bg-hover);
+      transform: translateX(4px);
+      box-shadow: var(--shadow);
+    }
+
+    .notification-icon {
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .notification-icon.critical { background: var(--critical-bg); }
+    .notification-icon.warning { background: var(--warning-bg); }
+    .notification-icon.info { background: var(--info-bg); }
+
+    .notification-body { flex: 1; min-width: 0; }
+
+    .notification-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .unread-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .notification-message {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .notification-time {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    /* ─── Rules Panel ───────────────────────────── */
+    .rule-form {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .rule-form h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .rule-list { display: flex; flex-direction: column; gap: 8px; }
+
+    .rule-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: all 0.2s;
+    }
+
+    .rule-item:hover {
+      background: var(--bg-hover);
+    }
+
+    .rule-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .rule-metric {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .rule-condition {
+      font-size: 13px;
+      color: var(--text-secondary);
+      padding: 4px 10px;
+      background: var(--bg-primary);
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+    }
+
+    .rule-severity {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+
+    .rule-severity.critical { background: var(--critical-bg); color: var(--critical); }
+    .rule-severity.warning { background: var(--warning-bg); color: var(--warning); }
+    .rule-severity.info { background: var(--info-bg); color: var(--info); }
+
+    .rule-delete {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+
+    .rule-delete:hover {
+      color: var(--critical);
+      background: var(--critical-bg);
+    }
+
+    /* ─── Empty State ───────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+
+    .empty-state .emoji { font-size: 48px; margin-bottom: 16px; }
+    .empty-state h3 { font-size: 18px; margin-bottom: 8px; color: var(--text-primary); }
+    .empty-state p { font-size: 14px; }
+
+    /* ─── Hidden panel ──────────────────────────── */
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ─── Toast ──────────────────────────────────── */
+    .toast-container {
+      position: fixed;
+      top: 80px;
+      right: 24px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 14px 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      animation: slideIn 0.3s ease-out, fadeOut 0.3s ease-in 4.7s forwards;
+      max-width: 380px;
+    }
+
+    .toast.critical { border-left: 3px solid var(--critical); }
+    .toast.warning { border-left: 3px solid var(--warning); }
+    .toast.info { border-left: 3px solid var(--info); }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    @keyframes fadeOut {
+      to { opacity: 0; transform: translateX(50%); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div>
+        <h1>🔔 Notification Center</h1>
+        <div class="subtitle">Campaign Alert Monitoring</div>
+      </div>
+    </div>
+    <div class="bell-container" id="bellContainer">
+      <svg class="bell-icon" viewBox="0 0 24 24">
+        <path d="M12 22c1.1 0 2-.9 2-2h-4a2 2 0 002 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+      </svg>
+      <span class="badge" id="badge">0</span>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div class="status-indicator">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Connecting...</span>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="markAllRead()">Mark All Read</button>
+      <button class="btn btn-primary" onclick="triggerTestAlert()">Test Alert</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-panel="notifications" onclick="switchTab(this)">Notifications</button>
+    <button class="tab" data-panel="rules" onclick="switchTab(this)">Alert Rules</button>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+    <!-- Notifications Panel -->
+    <div class="panel active" id="panel-notifications">
+      <div class="notification-list" id="notificationList">
+        <div class="empty-state">
+          <div class="emoji">🔕</div>
+          <h3>No notifications yet</h3>
+          <p>Alert notifications will appear here when campaign metrics trigger rules.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rules Panel -->
+    <div class="panel" id="panel-rules">
+      <div class="rule-form">
+        <h3>Create Alert Rule</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Campaign ID</label>
+            <input type="number" id="ruleCampaignId" placeholder="e.g. 1" min="1">
+          </div>
+          <div class="form-group">
+            <label>Metric</label>
+            <select id="ruleMetric">
+              <option value="ctr">CTR (%)</option>
+              <option value="cpc">CPC ($)</option>
+              <option value="cpa">CPA ($)</option>
+              <option value="spend_pct">Budget Spent (%)</option>
+              <option value="impressions">Impressions</option>
+              <option value="clicks">Clicks</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Operator</label>
+            <select id="ruleOperator">
+              <option value="<">Less than (&lt;)</option>
+              <option value=">">Greater than (&gt;)</option>
+              <option value="<=">Less or equal (≤)</option>
+              <option value=">=">Greater or equal (≥)</option>
+              <option value="==">Equals (=)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Threshold</label>
+            <input type="number" id="ruleThreshold" placeholder="e.g. 1.0" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>Severity</label>
+            <select id="ruleSeverity">
+              <option value="warning">Warning</option>
+              <option value="critical">Critical</option>
+              <option value="info">Info</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="createRule()">Create Rule</button>
+      </div>
+
+      <div class="rule-list" id="ruleList">
+        <div class="empty-state">
+          <div class="emoji">📋</div>
+          <h3>No alert rules configured</h3>
+          <p>Create rules above to monitor campaign metrics in real-time.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Socket.IO Client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const API_BASE = window.location.origin;
+    let socket;
+    let notifications = [];
+
+    // ─── Socket.IO ──────────────────────────────────
+    function connectSocket() {
+      socket = io(API_BASE);
+
+      socket.on('connect', () => {
+        document.getElementById('statusDot').classList.remove('disconnected');
+        document.getElementById('statusText').textContent = 'Connected — Monitoring active';
+      });
+
+      socket.on('disconnect', () => {
+        document.getElementById('statusDot').classList.add('disconnected');
+        document.getElementById('statusText').textContent = 'Disconnected — Reconnecting...';
+      });
+
+      socket.on('unread_count', ({ count }) => {
+        updateBadge(count);
+      });
+
+      socket.on('recent_notifications', ({ notifications: recent }) => {
+        notifications = recent;
+        renderNotifications();
+      });
+
+      socket.on('new_notification', (notification) => {
+        notifications.unshift(notification);
+        renderNotifications();
+        showToast(notification);
+        // Animate bell
+        document.getElementById('bellContainer').classList.add('has-unread');
+        setTimeout(() => {
+          document.getElementById('bellContainer').classList.remove('has-unread');
+        }, 700);
+      });
+
+      socket.on('notification_updated', (notification) => {
+        const idx = notifications.findIndex(n => n.id === notification.id);
+        if (idx !== -1) {
+          notifications[idx] = notification;
+          renderNotifications();
+        }
+      });
+    }
+
+    // ─── Badge ──────────────────────────────────────
+    function updateBadge(count) {
+      const badge = document.getElementById('badge');
+      badge.textContent = count > 99 ? '99+' : count;
+      badge.classList.toggle('visible', count > 0);
+    }
+
+    // ─── Render Notifications ──────────────────────
+    function renderNotifications() {
+      const list = document.getElementById('notificationList');
+
+      if (notifications.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <div class="emoji">🔕</div>
+            <h3>No notifications yet</h3>
+            <p>Alert notifications will appear here when campaign metrics trigger rules.</p>
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = notifications.map(n => {
+        const icon = n.severity === 'critical' ? '🚨' : n.severity === 'warning' ? '⚠️' : 'ℹ️';
+        const timeAgo = getTimeAgo(n.created_at);
+        const unread = !n.read;
+
+        return `
+          <div class="notification-item severity-${n.severity} ${unread ? 'unread' : ''}"
+               onclick="markRead(${n.id})">
+            <div class="notification-icon ${n.severity}">${icon}</div>
+            <div class="notification-body">
+              <div class="notification-title">
+                ${unread ? '<div class="unread-dot"></div>' : ''}
+                ${escapeHtml(n.title)}
+              </div>
+              <div class="notification-message">${escapeHtml(n.message)}</div>
+              <div class="notification-time">${timeAgo}</div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // ─── Actions ────────────────────────────────────
+    function markRead(id) {
+      socket.emit('mark_read', { id });
+    }
+
+    function markAllRead() {
+      socket.emit('mark_all_read');
+      notifications.forEach(n => n.read = 1);
+      renderNotifications();
+    }
+
+    async function triggerTestAlert() {
+      // Create a test notification via the REST API
+      try {
+        const res = await fetch(`${API_BASE}/api/notifications`, {
+          method: 'GET',
+        });
+        // Just trigger a test by creating a rule if none exist
+        showToast({
+          title: 'Test Alert',
+          message: 'This is a test notification to verify the system is working.',
+          severity: 'info',
+        });
+      } catch (err) {
+        console.error('Test alert error:', err);
+      }
+    }
+
+    // ─── Tabs ───────────────────────────────────────
+    function switchTab(btn) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(`panel-${btn.dataset.panel}`).classList.add('active');
+
+      if (btn.dataset.panel === 'rules') loadRules();
+    }
+
+    // ─── Rules ──────────────────────────────────────
+    async function loadRules() {
+      try {
+        const res = await fetch(`${API_BASE}/api/rules`);
+        const { data: rules } = await res.json();
+        renderRules(rules);
+      } catch (err) {
+        console.error('Load rules error:', err);
+      }
+    }
+
+    function renderRules(rules) {
+      const list = document.getElementById('ruleList');
+
+      if (!rules || rules.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <div class="emoji">📋</div>
+            <h3>No alert rules configured</h3>
+            <p>Create rules above to monitor campaign metrics in real-time.</p>
+          </div>`;
+        return;
+      }
+
+      const metricLabels = {
+        ctr: 'CTR', cpc: 'CPC', cpa: 'CPA',
+        spend_pct: 'Budget %', impressions: 'Impressions', clicks: 'Clicks'
+      };
+
+      list.innerHTML = rules.map(r => `
+        <div class="rule-item">
+          <div class="rule-info">
+            <span class="rule-metric">${metricLabels[r.metric] || r.metric}</span>
+            <span class="rule-condition">${r.operator} ${r.threshold}</span>
+            <span class="rule-severity ${r.severity}">${r.severity}</span>
+            <span style="color: var(--text-muted); font-size: 12px;">Campaign #${r.campaign_id}</span>
+          </div>
+          <button class="rule-delete" onclick="deleteRule(${r.id})" title="Delete rule">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+            </svg>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    async function createRule() {
+      const campaign_id = parseInt(document.getElementById('ruleCampaignId').value);
+      const metric = document.getElementById('ruleMetric').value;
+      const operator = document.getElementById('ruleOperator').value;
+      const threshold = parseFloat(document.getElementById('ruleThreshold').value);
+      const severity = document.getElementById('ruleSeverity').value;
+
+      if (!campaign_id || isNaN(threshold)) {
+        showToast({ title: 'Validation Error', message: 'Campaign ID and threshold are required.', severity: 'warning' });
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/rules`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ campaign_id, metric, operator, threshold, severity }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showToast({ title: 'Rule Created', message: `Monitoring ${metric} ${operator} ${threshold} for campaign #${campaign_id}`, severity: 'info' });
+          loadRules();
+          // Clear form
+          document.getElementById('ruleCampaignId').value = '';
+          document.getElementById('ruleThreshold').value = '';
+        } else {
+          showToast({ title: 'Error', message: data.error, severity: 'critical' });
+        }
+      } catch (err) {
+        showToast({ title: 'Network Error', message: err.message, severity: 'critical' });
+      }
+    }
+
+    async function deleteRule(id) {
+      try {
+        await fetch(`${API_BASE}/api/rules/${id}`, { method: 'DELETE' });
+        loadRules();
+        showToast({ title: 'Rule Deleted', message: 'Alert rule has been removed.', severity: 'info' });
+      } catch (err) {
+        console.error('Delete rule error:', err);
+      }
+    }
+
+    // ─── Toast ──────────────────────────────────────
+    function showToast(notification) {
+      const container = document.getElementById('toastContainer');
+      const icon = notification.severity === 'critical' ? '🚨' : notification.severity === 'warning' ? '⚠️' : 'ℹ️';
+
+      const toast = document.createElement('div');
+      toast.className = `toast ${notification.severity}`;
+      toast.innerHTML = `<span>${icon}</span><div><strong>${escapeHtml(notification.title)}</strong><br><small>${escapeHtml(notification.message)}</small></div>`;
+      container.appendChild(toast);
+
+      setTimeout(() => toast.remove(), 5000);
+    }
+
+    // ─── Utilities ──────────────────────────────────
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function getTimeAgo(dateStr) {
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'Just now';
+      if (mins < 60) return `${mins}m ago`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `${hours}h ago`;
+      return `${Math.floor(hours / 24)}d ago`;
+    }
+
+    // ─── Initialize ─────────────────────────────────
+    connectSocket();
+  </script>
+</body>
+</html>

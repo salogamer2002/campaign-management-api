@@ -1,0 +1,74 @@
+# Render Blueprint — Advertising Campaign Platform Backend Services
+# Deploy with: https://render.com/deploy
+# Or connect your GitHub repo and Render auto-detects this file.
+
+services:
+  # ─── Task 2.1: Campaign Management API ──────────────────────
+  - type: web
+    name: campaign-management-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    rootDir: ./
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 24h
+      - key: CORS_ORIGIN
+        sync: false  # Set manually after deploying frontends
+    disk:
+      name: campaign-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+    healthCheckPath: /api/health
+
+  # ─── Task 2.2: AI Content Generation Service ───────────────
+  - type: web
+    name: ai-content-service
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: cd task-2.2-ai-content-service && npm install
+    startCommand: cd task-2.2-ai-content-service && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: CORS_ORIGIN
+        sync: false  # Set manually after deploying frontends
+    healthCheckPath: /health
+
+  # ─── Task 2.3: Notification System ─────────────────────────
+  - type: web
+    name: notification-system
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: cd task-2.3-notification-system && npm install
+    startCommand: cd task-2.3-notification-system && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3002
+      - key: CAMPAIGN_API_URL
+        fromService:
+          name: campaign-management-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+        # Append /api manually in Render dashboard
+      - key: CORS_ORIGIN
+        sync: false  # Set manually after deploying frontends
+    disk:
+      name: notification-data
+      mountPath: /opt/render/project/src/task-2.3-notification-system/data
+      sizeGB: 1
+    healthCheckPath: /health

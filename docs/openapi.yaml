@@ -1,0 +1,549 @@
+openapi: "3.0.3"
+info:
+  title: Campaign Management API
+  description: |
+    RESTful API for managing advertising campaigns.  
+    Supports full CRUD operations with JWT authentication, input validation,
+    rate limiting (100 req/min per IP), and soft-delete functionality.
+  version: "1.0.0"
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:6002/api
+    description: Local development server
+
+# ─── Security ────────────────────────────────────────────────
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT token obtained from POST /auth/login"
+
+  schemas:
+    # ── Error ──
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Campaign not found."
+
+    ValidationError:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Validation Error"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    # ── Auth ──
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: "admin@agency.com"
+        password:
+          type: string
+          minLength: 6
+          example: "admin123"
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            token:
+              type: string
+              example: "eyJhbGciOiJIUzI1NiIs..."
+            user:
+              type: object
+              properties:
+                id:
+                  type: integer
+                  example: 1
+                email:
+                  type: string
+                  example: "admin@agency.com"
+                name:
+                  type: string
+                  example: "Admin User"
+
+    # ── Campaign ──
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Summer Sale 2025"
+        description:
+          type: string
+          example: "Seasonal promotion for summer product line"
+        status:
+          type: string
+          enum: [active, paused, completed]
+          example: "active"
+        budget:
+          type: number
+          format: double
+          example: 15000.00
+        spend:
+          type: number
+          format: double
+          example: 8750.50
+        start_date:
+          type: string
+          format: date
+          example: "2025-06-01"
+        end_date:
+          type: string
+          format: date
+          example: "2025-08-31"
+        impressions:
+          type: integer
+          example: 450000
+        clicks:
+          type: integer
+          example: 12500
+        conversions:
+          type: integer
+          example: 890
+        user_id:
+          type: integer
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    CampaignWithMetrics:
+      allOf:
+        - $ref: "#/components/schemas/Campaign"
+        - type: object
+          properties:
+            ctr:
+              type: number
+              description: "Click-through rate (%)"
+              example: 2.78
+            cpc:
+              type: number
+              description: "Cost per click"
+              example: 0.70
+            cpa:
+              type: number
+              description: "Cost per acquisition"
+              example: 9.83
+            conversion_rate:
+              type: number
+              description: "Conversion rate (%)"
+              example: 0.1978
+            owner_name:
+              type: string
+              example: "Admin User"
+            owner_email:
+              type: string
+              example: "admin@agency.com"
+
+    CreateCampaignRequest:
+      type: object
+      required: [name, budget, start_date, end_date]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 255
+          example: "New Campaign"
+        description:
+          type: string
+          maxLength: 2000
+          example: "A brand new advertising campaign"
+        status:
+          type: string
+          enum: [active, paused, completed]
+          default: active
+        budget:
+          type: number
+          minimum: 0.01
+          example: 10000.00
+        spend:
+          type: number
+          minimum: 0
+          default: 0
+        start_date:
+          type: string
+          format: date
+          example: "2025-07-01"
+        end_date:
+          type: string
+          format: date
+          example: "2025-09-30"
+        impressions:
+          type: integer
+          minimum: 0
+          default: 0
+        clicks:
+          type: integer
+          minimum: 0
+          default: 0
+        conversions:
+          type: integer
+          minimum: 0
+          default: 0
+
+    UpdateCampaignRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 2000
+        status:
+          type: string
+          enum: [active, paused, completed]
+        budget:
+          type: number
+          minimum: 0.01
+        spend:
+          type: number
+          minimum: 0
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        impressions:
+          type: integer
+          minimum: 0
+        clicks:
+          type: integer
+          minimum: 0
+        conversions:
+          type: integer
+          minimum: 0
+
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 10
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        total_pages:
+          type: integer
+          example: 1
+
+# ─── Paths ───────────────────────────────────────────────────
+paths:
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login and obtain JWT token
+      description: Authenticate with email and password to receive a JWT token for API access.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /campaigns:
+    get:
+      tags: [Campaigns]
+      summary: List all campaigns
+      description: Retrieve campaigns with optional filtering by status, search by name, sorting, and pagination.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, paused, completed]
+          description: Filter by campaign status
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search campaigns by name (partial match)
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [name, status, budget, spend, start_date, end_date, impressions, clicks, conversions, created_at, updated_at]
+            default: created_at
+          description: Column to sort by
+        - name: sort_order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort direction
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Items per page
+      responses:
+        "200":
+          description: List of campaigns
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Campaign"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+
+    post:
+      tags: [Campaigns]
+      summary: Create a new campaign
+      description: Create a new advertising campaign. All required fields must be provided.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCampaignRequest"
+      responses:
+        "201":
+          description: Campaign created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Campaign created successfully."
+                  data:
+                    $ref: "#/components/schemas/Campaign"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Unauthorized
+        "429":
+          description: Rate limit exceeded
+
+  /campaigns/{id}:
+    get:
+      tags: [Campaigns]
+      summary: Get a single campaign
+      description: Retrieve a single campaign by ID with full computed metrics (CTR, CPC, CPA, conversion rate).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Campaign ID
+      responses:
+        "200":
+          description: Campaign details with metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/CampaignWithMetrics"
+        "400":
+          description: Invalid ID format
+        "401":
+          description: Unauthorized
+        "404":
+          description: Campaign not found
+        "429":
+          description: Rate limit exceeded
+
+    put:
+      tags: [Campaigns]
+      summary: Update a campaign
+      description: Update one or more fields of an existing campaign.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Campaign ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCampaignRequest"
+      responses:
+        "200":
+          description: Campaign updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Campaign updated successfully."
+                  data:
+                    $ref: "#/components/schemas/Campaign"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Campaign not found
+        "429":
+          description: Rate limit exceeded
+
+    delete:
+      tags: [Campaigns]
+      summary: Soft delete a campaign
+      description: Soft-delete a campaign by setting the deleted_at timestamp. The campaign data is preserved.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Campaign ID
+      responses:
+        "200":
+          description: Campaign deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Campaign deleted successfully."
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      deleted_at:
+                        type: string
+                        format: date-time
+        "401":
+          description: Unauthorized
+        "404":
+          description: Campaign not found
+        "429":
+          description: Rate limit exceeded
