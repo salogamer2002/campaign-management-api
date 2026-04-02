@@ -94,13 +94,47 @@ app.get('/api/health', (req, res) => {
 
 // ─── Swagger API Docs ───────────────────────────────────────
 const swaggerDocument = YAML.load(path.join(__dirname, '..', 'docs', 'openapi.yaml'));
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
-  customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: 'Campaign API Docs',
-  swaggerOptions: {
-    persistAuthorization: true,
-  },
-}));
+
+if (process.env.VERCEL) {
+  // On Vercel serverless, swagger-ui-express can't serve static assets
+  // (CSS/JS get routed through the function and return HTML instead).
+  // Serve a self-contained page that loads Swagger UI from a CDN.
+  app.get('/api-docs', (req, res) => {
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Campaign API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  <style>.swagger-ui .topbar { display: none }</style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+  <script>
+    SwaggerUIBundle({
+      spec: ${JSON.stringify(swaggerDocument)},
+      dom_id: '#swagger-ui',
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+      layout: 'StandaloneLayout',
+      persistAuthorization: true
+    });
+  </script>
+</body>
+</html>`;
+    res.type('html').send(html);
+  });
+} else {
+  // Local development — use swagger-ui-express normally
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'Campaign API Docs',
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  }));
+}
 
 // ─── Routes ─────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
